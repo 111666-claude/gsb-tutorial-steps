@@ -1,8 +1,4 @@
-"""新手引导：前置依赖、跳过条件、请求幂等与步骤顺序。
-
-缺陷：不检查前置依赖、跳过条件不生效、同一个请求重复生效、
-进度按完成顺序而不是定义顺序、每次触发扫描全部步骤。
-"""
+"""新手引导：前置依赖、跳过条件、请求幂等与步骤顺序。"""
 
 
 class Tutorial:
@@ -20,13 +16,24 @@ class Tutorial:
 
     def activate(self, step_id, req_id):
         """触发一个引导步骤。"""
-        self.scanned += len(self.steps)
+        self.scanned += 1
         step = self.by_id.get(step_id)
         if step is None:
             return False
+        if req_id in self.applied:
+            return False
+        if step_id in self.done or step_id in self.skipped:
+            return False
+        for dep in step.get("requires", []):
+            if dep not in self.done and dep not in self.skipped:
+                self.pending.add(step_id)
+                return False
         self.applied.add(req_id)
-        self.done.add(step_id)
-        self.order.append(step_id)
+        self.pending.discard(step_id)
+        if step.get("skip_flag"):
+            self.skipped.add(step_id)
+        else:
+            self.done.add(step_id)
         return True
 
     def complete(self, step_id, req_id):
@@ -43,7 +50,8 @@ class Tutorial:
 
     def progress(self):
         """按定义顺序返回已完成或已跳过的步骤。"""
-        return list(self.order)
+        resolved = self.done | self.skipped
+        return [step["id"] for step in self.steps if step["id"] in resolved]
 
     def scanned_count(self):
         return self.scanned
